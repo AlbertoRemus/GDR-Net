@@ -27,14 +27,14 @@ from detectron2.utils.logger import create_small_table, log_every_n_seconds, log
 from tabulate import tabulate
 from tqdm import tqdm
 from transforms3d.quaternions import quat2mat
-
+import os
 cur_dir = osp.dirname(osp.abspath(__file__))
 import ref
 from core.utils.my_comm import all_gather, is_main_process, synchronize
 from core.utils.pose_utils import get_closest_rot
 from core.utils.data_utils import crop_resize_by_warp_affine
 from lib.pysixd import inout, misc
-from lib.pysixd.pose_error import add, adi, arp_2d, re, te
+from lib.pysixd.pose_error import add, adi, arp_2d, re, te, transform_pts_Rt_2d
 from lib.utils.mask_utils import binary_mask_to_rle
 from lib.utils.utils import dprint
 from lib.vis_utils.image import grid_show, vis_image_bboxes_cv2
@@ -532,6 +532,12 @@ class GDRN_EvaluatorCustom(DatasetEvaluator):
         ]
 
         for obj_name in self.gts:
+            outdir = os.path.join(self._output_dir, obj_name)
+            if not os.path.isdir(outdir):
+                os.mkdir(outdir)
+                os.mkdir(os.path.join(outdir, "gt"))
+                os.mkdir(os.path.join(outdir, "pr"))
+
             if obj_name not in self._predictions:
                 continue
             cur_label = self.obj_names.index(obj_name)
@@ -562,12 +568,42 @@ class GDRN_EvaluatorCustom(DatasetEvaluator):
 
                 t_error = te(t_pred, t_gt)
 
+                pts_3d = self.models_3d[cur_label]["pts"]
+                min_x = np.min(pts_3d[:, 0])
+                max_x = np.max(pts_3d[:, 0])
+                min_y = np.min(pts_3d[:, 1])
+                max_y = np.max(pts_3d[:, 1])
+                min_z = np.min(pts_3d[:, 2])
+                max_z = np.max(pts_3d[:, 2])
+
+                bbox_3d = np.array([[0, 0 , 0],
+                                   [min_x, min_y, min_z],
+                                   [min_x, min_y, max_z],
+                                   [min_x, max_y, min_z],
+                                   [min_x, max_y, max_z],
+                                   [max_x, min_y, min_z],
+                                   [max_x, min_y, max_z],
+                                   [max_x, max_y, min_z],
+                                   [max_x, max_y, max_z]])
+
+                K = gt_anno["K"]
+                corners_2d_gt = transform_pts_Rt_2d(bbox_3d, R_gt, t_gt, K)
+                corners_2d_pred = transform_pts_Rt_2d(bbox_3d, R_pred, t_pred, K)
+
+                file_id = file_name.split("/")[-1].split(".")[0]
+                np.savetxt(outdir + '/gt/R_' + file_id + '.txt', R_gt)
+                np.savetxt(outdir + '/gt/t_' + file_id + '.txt', t_gt)
+                np.savetxt(outdir + '/pr/R_' + file_id + '.txt', R_pred)
+                np.savetxt(outdir + '/pr/t_' + file_id + '.txt', t_pred)
+                np.savetxt(outdir + '/gt/corners_' + file_id + '.txt', corners_2d_gt)
+                np.savetxt(outdir + '/pr/corners_' + file_id + '.txt', corners_2d_pred)
+
                 if obj_name in cfg.DATASETS.SYM_OBJS:
                     R_gt_sym = get_closest_rot(R_pred, R_gt, self._metadata.sym_infos[cur_label])
                     r_error = re(R_pred, R_gt_sym)
 
                     proj_2d_error = arp_2d(
-                        R_pred, t_pred, R_gt_sym, t_gt, pts=self.models_3d[cur_label]["pts"], K=gt_anno["K"]
+                        R_pred, t_pred, R_gt_sym, t_gt, pts=pts_3d, K=K
                     )
 
                     ad_error = adi(
