@@ -576,7 +576,7 @@ class GDRN_EvaluatorCustom(DatasetEvaluator):
                 min_z = np.min(pts_3d[:, 2])
                 max_z = np.max(pts_3d[:, 2])
 
-                bbox_3d = np.array([[0, 0 , 0],
+                bbox_3d = np.array([[0, 0, 0],
                                    [min_x, min_y, min_z],
                                    [min_x, min_y, max_z],
                                    [min_x, max_y, min_z],
@@ -590,13 +590,20 @@ class GDRN_EvaluatorCustom(DatasetEvaluator):
                 corners_2d_gt = transform_pts_Rt_2d(bbox_3d, R_gt, t_gt, K)
                 corners_2d_pred = transform_pts_Rt_2d(bbox_3d, R_pred, t_pred, K)
 
-                file_id = file_name.split("/")[-1].split(".")[0]
-                np.savetxt(outdir + '/gt/R_' + file_id + '.txt', R_gt)
-                np.savetxt(outdir + '/gt/t_' + file_id + '.txt', t_gt)
-                np.savetxt(outdir + '/pr/R_' + file_id + '.txt', R_pred)
-                np.savetxt(outdir + '/pr/t_' + file_id + '.txt', t_pred)
-                np.savetxt(outdir + '/gt/corners_' + file_id + '.txt', corners_2d_gt)
-                np.savetxt(outdir + '/pr/corners_' + file_id + '.txt', corners_2d_pred)
+                corners_2d_all_gt = transform_pts_Rt_2d(pts_3d, R_gt, t_gt, K)
+                corners_2d_all_pr = transform_pts_Rt_2d(pts_3d, R_pred, t_pred, K)
+
+                path_temp = file_name.split(".")[0]
+                dir_id = path_temp.split("/")[-3]
+                file_id = path_temp.split("/")[-1]
+                np.savetxt(outdir + '/gt/R_' + dir_id + "_" + file_id + '.txt', R_gt)
+                np.savetxt(outdir + '/gt/t_' + dir_id + "_" + file_id + '.txt', t_gt)
+                np.savetxt(outdir + '/pr/R_' + dir_id + "_" + file_id + '.txt', R_pred)
+                np.savetxt(outdir + '/pr/t_' + dir_id + "_" + file_id + '.txt', t_pred)
+                np.savetxt(outdir + '/gt/corners_' + dir_id + "_" + file_id + '.txt', corners_2d_gt)
+                np.savetxt(outdir + '/pr/corners_' + dir_id + "_" + file_id + '.txt', corners_2d_pred)
+                np.savetxt(outdir + '/gt/corners_2d_all_' + dir_id + "_" + file_id + '.txt', corners_2d_all_gt)
+                np.savetxt(outdir + '/pr/corners_2d_all_' + dir_id + "_" + file_id + '.txt', corners_2d_all_pr)
 
                 if obj_name in cfg.DATASETS.SYM_OBJS:
                     R_gt_sym = get_closest_rot(R_pred, R_gt, self._metadata.sym_infos[cur_label])
@@ -613,7 +620,7 @@ class GDRN_EvaluatorCustom(DatasetEvaluator):
                     r_error = re(R_pred, R_gt)
 
                     proj_2d_error = arp_2d(
-                        R_pred, t_pred, R_gt, t_gt, pts=self.models_3d[cur_label]["pts"], K=gt_anno["K"]
+                        R_pred, t_pred, R_gt, t_gt, pts=pts_3d, K=K
                     )
 
                     ad_error = add(
